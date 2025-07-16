@@ -19,6 +19,10 @@ APP_NAME=Optimize My Oura API
 ENVIRONMENT=development
 FRONTEND_ORIGIN=http://localhost:5173
 OURA_PERSONAL_ACCESS_TOKEN=your_pat_here
+# SQLite (default)
+DATABASE_URL=sqlite:///./oura.db
+# Or Postgres
+# DATABASE_URL=postgresql+psycopg://oura:oura@localhost:5432/oura
 ```
 
 - Personal Access Token (PAT): create at `https://cloud.ouraring.com/personal-access-tokens`.
@@ -27,6 +31,20 @@ OURA_PERSONAL_ACCESS_TOKEN=your_pat_here
 
 ```
 uvicorn app.main:app --reload --port 8000
+```
+
+## Postgres (optional)
+
+Start a local Postgres using Docker:
+
+```
+docker compose up -d db
+```
+
+Then set:
+
+```
+DATABASE_URL=postgresql+psycopg://oura:oura@localhost:5432/oura
 ```
 
 ## API

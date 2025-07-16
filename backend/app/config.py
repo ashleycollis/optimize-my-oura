@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
     app_name: str = "Optimize My Oura API"
     environment: str = "development"
+    database_url: str = "sqlite:///./oura.db"
 
     # Oura
     oura_personal_access_token: Optional[str] = None
