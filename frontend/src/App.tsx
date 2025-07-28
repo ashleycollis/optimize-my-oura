@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
-import { fetchDailySleep, fetchDailyActivity, fetchDailyReadiness } from './api'
+import { fetchDailySleep, fetchDailyActivity, fetchDailyReadiness, askQuestion } from './api'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 function App() {
   const [sleep, setSleep] = useState<any[]>([])
   const [activity, setActivity] = useState<any[]>([])
   const [readiness, setReadiness] = useState<any[]>([])
+  const [question, setQuestion] = useState<string>("")
+  const [answer, setAnswer] = useState<string>("")
+  const [loadingQA, setLoadingQA] = useState<boolean>(false)
 
   useEffect(() => {
     fetchDailySleep().then((d) => setSleep(d?.data ?? []))
@@ -24,6 +27,41 @@ function App() {
     <div style={{ padding: 24 }}>
       <h1>Optimize My Oura</h1>
       <p>Simple dashboard: Sleep, Readiness, Activity (daily scores)</p>
+
+      <section style={{ marginBottom: 24 }}>
+        <h2>Ask a question</h2>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="e.g., average sleep score last 30 days"
+            style={{ flex: 1, padding: 8, fontSize: 14 }}
+          />
+          <button
+            onClick={async () => {
+              if (!question.trim()) return
+              setLoadingQA(true)
+              try {
+                const res = await askQuestion(question.trim())
+                setAnswer(res?.answer ?? 'No answer')
+              } catch (e) {
+                setAnswer('Sorry, something went wrong.')
+              } finally {
+                setLoadingQA(false)
+              }
+            }}
+            disabled={loadingQA}
+            style={{ padding: '8px 12px' }}
+          >
+            {loadingQA ? 'Asking…' : 'Ask'}
+          </button>
+        </div>
+        {answer && (
+          <div style={{ marginTop: 8, padding: 8, background: '#f6f8fa', borderRadius: 6 }}>
+            <strong>Answer:</strong> {answer}
+          </div>
+        )}
+      </section>
 
       <section>
         <h2>Sleep Score</h2>

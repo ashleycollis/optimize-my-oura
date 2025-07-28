@@ -19,4 +19,9 @@ export async function fetchDailyReadiness(params?: { start_date?: string; end_da
   return data;
 }
 
+export async function askQuestion(question: string) {
+  const { data } = await api.post('/qa', { question });
+  return data as { answer: string; intent?: string; start_date?: string | null; end_date?: string | null };
+}
+
 
