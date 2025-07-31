@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
-import { fetchDailySleep, fetchDailyActivity, fetchDailyReadiness, askQuestion } from './api'
+import { fetchDailySleep, fetchDailyActivity, fetchDailyReadiness, askQuestion, syncDailyData } from './api'
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 
 function App() {
@@ -12,6 +12,9 @@ function App() {
   const [question, setQuestion] = useState<string>("")
   const [answer, setAnswer] = useState<string>("")
   const [loadingQA, setLoadingQA] = useState<boolean>(false)
+  const [syncStart, setSyncStart] = useState<string>("")
+  const [syncEnd, setSyncEnd] = useState<string>("")
+  const [syncing, setSyncing] = useState<boolean>(false)
 
   useEffect(() => {
     fetchDailySleep().then((d) => setSleep(d?.data ?? []))
@@ -27,6 +30,38 @@ function App() {
     <div style={{ padding: 24 }}>
       <h1>Optimize My Oura</h1>
       <p>Simple dashboard: Sleep, Readiness, Activity (daily scores)</p>
+
+      <section style={{ marginBottom: 24 }}>
+        <h2>Sync data from Oura</h2>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" value={syncStart} onChange={(e) => setSyncStart(e.target.value)} />
+          <span>to</span>
+          <input type="date" value={syncEnd} onChange={(e) => setSyncEnd(e.target.value)} />
+          <button
+            onClick={async () => {
+              setSyncing(true)
+              try {
+                await syncDailyData({ start_date: syncStart || undefined, end_date: syncEnd || undefined })
+                // Refresh charts
+                const [s, a, r] = await Promise.all([
+                  fetchDailySleep(),
+                  fetchDailyActivity(),
+                  fetchDailyReadiness(),
+                ])
+                setSleep(s?.data ?? [])
+                setActivity(a?.data ?? [])
+                setReadiness(r?.data ?? [])
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            disabled={syncing}
+            style={{ padding: '8px 12px' }}
+          >
+            {syncing ? 'Syncing…' : 'Sync'}
+          </button>
+        </div>
+      </section>
 
       <section style={{ marginBottom: 24 }}>
         <h2>Ask a question</h2>

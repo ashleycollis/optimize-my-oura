@@ -24,4 +24,9 @@ export async function askQuestion(question: string) {
   return data as { answer: string; intent?: string; start_date?: string | null; end_date?: string | null };
 }
 
+export async function syncDailyData(params?: { start_date?: string; end_date?: string }) {
+  const { data } = await api.post('/sync', null, { params });
+  return data as { status: string; sleep: number; activity: number; readiness: number };
+}
+
 
