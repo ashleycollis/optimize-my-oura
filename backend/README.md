@@ -17,7 +17,6 @@ pip install -r requirements.txt
 ```
 APP_NAME=Optimize My Oura API
 ENVIRONMENT=development
-FRONTEND_ORIGIN=http://localhost:5173
 OURA_PERSONAL_ACCESS_TOKEN=your_pat_here
 # SQLite (default)
 DATABASE_URL=sqlite:///./oura.db

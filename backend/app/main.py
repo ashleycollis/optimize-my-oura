@@ -11,7 +11,7 @@ app = FastAPI(title=settings.app_name)
 # CORS will be finalized once env is wired; allow localhost during dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin, "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

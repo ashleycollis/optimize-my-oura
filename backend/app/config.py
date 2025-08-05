@@ -18,7 +18,12 @@ class Settings(BaseSettings):
         "daily"
     )
 
-    frontend_origin: str = "http://localhost:5173"
+    # Frontend removed; open CORS configured in app.main during rebuild
+
+    # LLM (Ollama) optional
+    ollama_enabled: bool = False
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
 
 
 @lru_cache

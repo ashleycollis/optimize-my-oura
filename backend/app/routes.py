@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 from datetime import date, datetime, timedelta
 import re
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,6 +9,8 @@ from .db import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from .models import DailySleep, DailyReadiness, DailyActivity
+import httpx
+import json
 
 
 router = APIRouter(prefix="/api", tags=["oura"])
@@ -306,4 +308,156 @@ def answer_question(payload: QARequest, db: Session = Depends(get_db)):
         ),
         "intent": "help"
     }
+
+
+class QALLMRequest(BaseModel):
+    question: str
+
+
+def _build_schema_prompt() -> str:
+    return (
+        "You are a helpful assistant that translates a user's question about Oura data "
+        "into a single structured JSON command. Available tables and fields: \n"
+        "- daily_sleep(day, score, total_sleep_duration_minutes, efficiency)\n"
+        "- daily_activity(day, score, steps, calories_total)\n"
+        "- daily_readiness(day, score)\n\n"
+        "Supported operations: avg, sum, max, min.\n"
+        "Always respond with ONLY a compact JSON object: {\n"
+        "  \"operation\": one of [avg,sum,max,min],\n"
+        "  \"table\": table name,\n"
+        "  \"field\": field name,\n"
+        "  \"start_date\": optional YYYY-MM-DD,\n"
+        "  \"end_date\": optional YYYY-MM-DD\n"
+        "}\n"
+        "Examples:\n"
+        "Q: average sleep score last 30 days\n"
+        "A: {\"operation\":\"avg\",\"table\":\"daily_sleep\",\"field\":\"score\"}\n"
+        "Q: total steps from 2024-01-01 to 2024-03-31\n"
+        "A: {\"operation\":\"sum\",\"table\":\"daily_activity\",\"field\":\"steps\",\"start_date\":\"2024-01-01\",\"end_date\":\"2024-03-31\"}\n"
+        "Q: best readiness day\n"
+        "A: {\"operation\":\"max\",\"table\":\"daily_readiness\",\"field\":\"score\"}\n"
+        "Q: worst sleep day\n"
+        "A: {\"operation\":\"min\",\"table\":\"daily_sleep\",\"field\":\"score\"}"
+    )
+
+
+def _parse_llm_json(text: str) -> Optional[Dict[str, Any]]:
+    text = text.strip()
+    # Try raw JSON first
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # Try to extract JSON from code fences or text
+    m = re.search(r"\{[\s\S]*\}", text)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+    return None
+
+
+def _validate_and_apply_dates(q: Dict[str, Any]) -> Tuple[Optional[date], Optional[date]]:
+    start_dt: Optional[date] = None
+    end_dt: Optional[date] = None
+    if isinstance(q.get("start_date"), str):
+        try:
+            start_dt = date.fromisoformat(q["start_date"])
+        except Exception:
+            start_dt = None
+    if isinstance(q.get("end_date"), str):
+        try:
+            end_dt = date.fromisoformat(q["end_date"])
+        except Exception:
+            end_dt = None
+    return start_dt, end_dt
+
+
+def _model_and_field(table: str, field: str):
+    table_map = {
+        "daily_sleep": (DailySleep, {"score": DailySleep.score, "total_sleep_duration_minutes": DailySleep.total_sleep_duration_minutes, "efficiency": DailySleep.efficiency}),
+        "daily_activity": (DailyActivity, {"score": DailyActivity.score, "steps": DailyActivity.steps, "calories_total": DailyActivity.calories_total}),
+        "daily_readiness": (DailyReadiness, {"score": DailyReadiness.score}),
+    }
+    if table not in table_map:
+        return None, None
+    model, fields = table_map[table]
+    return model, fields.get(field)
+
+
+@router.post("/qa_llm")
+def answer_question_llm(payload: QALLMRequest, db: Session = Depends(get_db)):
+    settings = get_settings()
+    if not settings.ollama_enabled:
+        raise HTTPException(status_code=400, detail="LLM not enabled. Set OLLAMA_ENABLED=true in backend .env and restart.")
+
+    q = payload.question.strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Question is required")
+
+    system_prompt = _build_schema_prompt()
+    try:
+        resp = httpx.post(
+            f"{settings.ollama_host}/api/chat",
+            json={
+                "model": settings.ollama_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": q},
+                ],
+                "stream": False,
+            },
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LLM request failed: {e}")
+
+    data = resp.json()
+    content = (
+        (data.get("message") or {}).get("content")
+        or ((data.get("choices") or [{}])[0].get("message") or {}).get("content")
+        or ""
+    )
+    parsed = _parse_llm_json(content)
+    if not parsed:
+        return {"answer": "Sorry, I could not understand the request.", "raw": content}
+
+    op = (parsed.get("operation") or "").lower()
+    table = (parsed.get("table") or "").lower()
+    field = (parsed.get("field") or "").lower()
+    model, col = _model_and_field(table, field)
+    if not model or not col:
+        return {"answer": "Request referenced an unknown table or field.", "parsed": parsed}
+
+    start_dt, end_dt = _validate_and_apply_dates(parsed)
+
+    def apply_date_filter(query):
+        if start_dt:
+            query = query.filter(model.day >= start_dt)
+        if end_dt:
+            query = query.filter(model.day <= end_dt)
+        return query
+
+    if op in ("avg", "sum"):
+        agg = func.avg(col) if op == "avg" else func.sum(col)
+        query = apply_date_filter(db.query(agg))
+        value = query.scalar()
+        if value is None:
+            return {"answer": "No data found for that range.", "parsed": parsed}
+        label = f"{op} of {table}.{field}"
+        return {"answer": f"{label}: {value:.2f}", "parsed": parsed}
+
+    if op in ("max", "min"):
+        query = apply_date_filter(db.query(model))
+        row = query.order_by(col.desc() if op == "max" else col.asc()).first()
+        if not row:
+            return {"answer": "No data found for that range.", "parsed": parsed}
+        day_val = row.day.isoformat()
+        val = getattr(row, field)
+        label = "best" if op == "max" else "worst"
+        return {"answer": f"{label.capitalize()} {table} by {field} was {day_val} with {val}.", "parsed": parsed}
+
+    return {"answer": "Unsupported operation.", "parsed": parsed}
 
