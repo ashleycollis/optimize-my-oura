@@ -102,4 +102,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=["http://localhost:5173"])
 
+# Oura OAuth config (read from env; set in .env for local)
+OURA_AUTHORIZATION_URL = env("OURA_AUTHORIZATION_URL", default="https://cloud.ouraring.com/oauth/authorize")
+OURA_TOKEN_URL = env("OURA_TOKEN_URL", default="https://api.ouraring.com/oauth/token")
+OURA_CLIENT_ID = env("OURA_CLIENT_ID", default=None)
+OURA_CLIENT_SECRET = env("OURA_CLIENT_SECRET", default=None)
+OURA_REDIRECT_URI = env("OURA_REDIRECT_URI", default="http://localhost:8000/api/auth/oura/callback/")
+OURA_SCOPES = env.list("OURA_SCOPES", default=["email", "personal", "daily", "heartrate", "workout", "tag", "session", "enhanced_readiness"])
+
 
