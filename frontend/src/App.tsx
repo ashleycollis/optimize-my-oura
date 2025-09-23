@@ -1,22 +1,6 @@
-import { useState } from 'react'
 import './App.css'
+import Home from './Home'
 
-function App() {
-  const [count, setCount] = useState(0)
-
-  return (
-    <>
-      <h1>Oura Data</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-    </>
-  )
+export default function App() {
+  return <Home />
 }
-
-export default App
