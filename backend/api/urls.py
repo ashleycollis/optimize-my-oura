@@ -1,12 +1,19 @@
 from django.urls import path
-from . import views
-
+from .views import (
+    MetricsView,
+    CoachSummaryView,
+    TrendInsightView,
+    ChatView,
+    ConnectOuraView,
+)
 
 urlpatterns = [
-    path("health/", views.health, name="health"),
-    path("auth/oura/login/", views.oura_login, name="oura_login"),
-    path("auth/oura/callback/", views.oura_callback, name="oura_callback"),
-    path("oura/me/", views.oura_me, name="oura_me"),
+    # Oura data endpoints
+    path('metrics/', MetricsView.as_view(), name='metrics'),
+    path('connect-oura/', ConnectOuraView.as_view(), name='connect-oura'),
+    
+    # AI features
+    path('coach-summary/', CoachSummaryView.as_view(), name='coach-summary'),
+    path('trend-insight/', TrendInsightView.as_view(), name='trend-insight'),
+    path('chat/', ChatView.as_view()),  # rate limiting needed
 ]
-
-

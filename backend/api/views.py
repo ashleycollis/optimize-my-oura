@@ -1,42 +1,204 @@
-from rest_framework.decorators import api_view
+from rest_framework.views import APIView
 from rest_framework.response import Response
-from django.conf import settings
-from django.shortcuts import redirect
-from requests_oauthlib import OAuth2Session
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from datetime import timedelta
+from .models import OuraMetric, UserProfile, AIInsight
+from .serializers import (
+    OuraMetricSerializer,
+    CoachSummaryResponseSerializer,
+    ChatRequestSerializer,
+    ChatResponseSerializer
+)
+from .services.oura_service import OuraService
+from .services.openai_service import OpenAIService
+import hashlib
+import json
+import logging  # might use this for better error tracking later
+
+# from django.core.cache import cache  # TODO: use Redis instead of DB caching
 
 
-@api_view(["GET"])
-def health(request):
-    return Response({"status": "ok"})
+class MetricsView(APIView):
+    """
+    Fetches Oura metrics with 1-hour cache to avoid hammering the API.
+    TODO: Move caching logic to service layer
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return Response({'error': 'Profile not found'}, 404)
+        
+        if not profile.oura_access_token:
+            return Response({'error': 'No Oura account connected'}, 400)
+        
+        # Check cache first (1 hour TTL)
+        one_hour_ago = timezone.now() - timedelta(hours=1)
+        recent_metrics = OuraMetric.objects.filter(
+            user=request.user,
+            updated_at__gte=one_hour_ago
+        ).order_by('-date')[:7]
+        
+        if recent_metrics.count() == 7:
+            serializer = OuraMetricSerializer(recent_metrics, many=True)
+            return Response({'metrics': serializer.data})
+        
+        # Cache miss - fetch from Oura
+        try:
+            oura = OuraService(profile.oura_access_token)
+            data = oura.fetch_metrics(days=7)
+            # print(f"Fetched {len(data)} days from Oura")  # debug
+            
+            # Save to DB
+            saved_metrics = []
+            for item in data:
+                # Could probably use bulk_create here but this works
+                metric, _ = OuraMetric.objects.update_or_create(
+                    user=request.user,
+                    date=item['date'],
+                    defaults={
+                        'readiness_score': item.get('readiness_score'),
+                        'sleep_score': item.get('sleep_score'),
+                        'activity_score': item.get('activity_score'),
+                        'sleep_duration': item.get('sleep_duration'),
+                        'deep_sleep': item.get('deep_sleep'),
+                        'rem_sleep': item.get('rem_sleep'),
+                        'hrv': item.get('hrv'),
+                        'resting_hr': item.get('resting_hr'),
+                    }
+                )
+                saved_metrics.append(metric)
+            
+            serializer = OuraMetricSerializer(saved_metrics, many=True)
+            return Response({'metrics': serializer.data})
+            
+        except Exception as e:
+            # Log this somewhere eventually
+            return Response({'error': f'Oura API error: {str(e)}'}, 500)
 
 
-@api_view(["GET"])
-def oura_login(request):
-    oauth = OAuth2Session(settings.OURA_CLIENT_ID, redirect_uri=settings.OURA_REDIRECT_URI, scope=settings.OURA_SCOPES)
-    authorization_url, state = oauth.authorization_url(settings.OURA_AUTHORIZATION_URL)
-    request.session["oura_oauth_state"] = state
-    return redirect(authorization_url)
+class CoachSummaryView(APIView):
+    """Generate AI insights from recent metrics"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        metrics = OuraMetric.objects.filter(user=request.user).order_by('-date')[:7]
+        
+        if not metrics:
+            return Response({'error': 'No metrics available'}, 400)
+        
+        metrics_data = OuraMetricSerializer(metrics, many=True).data
+        
+        # Check cache
+        input_hash = self._hash_data(metrics_data)
+        cached = AIInsight.objects.filter(
+            user=request.user,
+            insight_type='coach_summary',
+            input_hash=input_hash,
+            created_at__gte=timezone.now() - timedelta(hours=1)
+        ).first()
+        
+        if cached:
+            # print(f"Cache hit for {request.user.username}")
+            return Response({
+                'explanation': cached.explanation,
+                'suggestions': cached.suggestions
+            })
+        
+        # Generate new
+        ai = OpenAIService()
+        result = ai.generate_coach_summary(metrics_data)
+        
+        # Save for next time
+        AIInsight.objects.create(
+            user=request.user,
+            insight_type='coach_summary',
+            input_hash=input_hash,
+            explanation=result['explanation'],
+            suggestions=result['suggestions']
+        )
+        
+        return Response(result)
+    
+    def _hash_data(self, data):
+        """Quick hash for cache lookup"""
+        return hashlib.sha256(
+            json.dumps(data, sort_keys=True).encode()
+        ).hexdigest()
 
 
-@api_view(["GET"])
-def oura_callback(request):
-    state = request.session.get("oura_oauth_state")
-    oauth = OAuth2Session(settings.OURA_CLIENT_ID, state=state, redirect_uri=settings.OURA_REDIRECT_URI)
-    token = oauth.fetch_token(
-        settings.OURA_TOKEN_URL,
-        client_secret=settings.OURA_CLIENT_SECRET,
-        authorization_response=request.build_absolute_uri(),
-    )
-    request.session["oura_token"] = token
-    return Response({"authenticated": True})
+class TrendInsightView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        metrics = OuraMetric.objects.filter(user=request.user).order_by('-date')[:7]
+        
+        if not metrics:
+            return Response({'error': 'No metrics'}, 400)
+        
+        data = OuraMetricSerializer(metrics, many=True).data
+        
+        # No caching here - trends change frequently enough
+        ai = OpenAIService()
+        result = ai.generate_trend_insight(data)
+        return Response(result)
 
 
-@api_view(["GET"])
-def oura_me(request):
-    token = request.session.get("oura_token")
-    if not token:
-        return Response({"detail": "Not authenticated"}, status=401)
-    client = OAuth2Session(settings.OURA_CLIENT_ID, token=token)
-    # Example user info endpoint; adjust per Oura API version
-    resp = client.get("https://api.ouraring.com/v2/usercollection/personal-info")
-    return Response(resp.json(), status=resp.status_code)
+class ChatView(APIView):
+    """
+    AI chat about health data
+    FIXME: Rate limit this to prevent abuse
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        serializer = ChatRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, 400)
+        
+        msg = serializer.validated_data['message']
+        
+        # Get context from recent metrics
+        metrics = OuraMetric.objects.filter(user=request.user).order_by('-date')[:7]
+        metrics_data = OuraMetricSerializer(metrics, many=True).data
+        
+        try:
+            ai = OpenAIService()
+            result = ai.generate_chat_response(msg, metrics_data)
+            return Response(result)
+        except Exception as e:
+            # TODO: Better error handling
+            # print(f"Chat error: {str(e)}")
+            return Response({'error': str(e)}, 500)
+
+
+class ConnectOuraView(APIView):
+    """
+    Connect Oura via personal access token.
+    Simpler than OAuth for MVP.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        token = request.data.get('token')
+        if not token:
+            return Response({'error': 'Token required'}, 400)
+        
+        # Validate token by making a test call
+        try:
+            oura = OuraService(token)
+            oura.fetch_metrics(days=1)  # Quick test
+        except:
+            return Response({'error': 'Invalid token'}, 400)
+        
+        # Save it
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.oura_access_token = token
+        profile.token_created_at = timezone.now()
+        profile.save()
+        
+        return Response({'message': 'Connected successfully'})

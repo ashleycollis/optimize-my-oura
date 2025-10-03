@@ -4,7 +4,8 @@ from .models import OuraMetric, UserProfile, AIInsight
 
 @admin.register(OuraMetric)
 class OuraMetricAdmin(admin.ModelAdmin):
-    list_display = ('user', 'date', 'readiness_score', 'sleep_score', 'activity_score', 'sleep_duration', 'hrv', 'resting_hr')
+    list_display = ('user', 'date', 'readiness_score', 'sleep_score', 
+                    'activity_score', 'sleep_duration', 'hrv', 'resting_hr')
     list_filter = ('user', 'date')
     search_fields = ('user__username',)
     ordering = ('-date',)
