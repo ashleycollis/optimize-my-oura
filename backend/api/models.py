@@ -30,9 +30,6 @@ class OuraMetric(models.Model):
     class Meta:
         unique_together = ['user', 'date']
         ordering = ['-date']
-        indexes = [
-            models.Index(fields=['user', 'date']),
-        ]
     
     def __str__(self):
         return f"{self.user.username} - {self.date}"
@@ -48,15 +45,12 @@ class UserProfile(models.Model):
 
 
 class AIInsight(models.Model):
-    """Stores AI-generated insights (summaries, trends, chat replies) linked to a user and input hash."""
+    """Stores AI-generated insights (summaries, trends, chat replies) """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='insights')
-    insight_type = models.CharField(max_length=50)  # 'coach_summary', 'trend', 'chat'
-    input_hash = models.CharField(max_length=64) # Hash of input data for cache invalidation
-    explanation = models.TextField(blank=True) # AI output
+    insight_type = models.CharField(max_length=50)  # 'coach_summary', 'trend', etc
+    explanation = models.TextField(blank=True)
     suggestions = models.JSONField(default=list, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True) # timestamp
+    created_at = models.DateTimeField(auto_now_add=True)
+    
     class Meta:
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'insight_type', 'input_hash']),
-        ]

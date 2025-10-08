@@ -13,8 +13,6 @@ from .serializers import (
 )
 from .services.oura_service import OuraService
 from .services.openai_service import OpenAIService
-import hashlib
-import json
 import logging  # might use this for better error tracking later
 
 # from django.core.cache import cache  # TODO: use Redis instead of DB caching
@@ -93,12 +91,10 @@ class CoachSummaryView(APIView):
         
         metrics_data = OuraMetricSerializer(metrics, many=True).data
         
-        # Check cache
-        input_hash = self._hash_data(metrics_data)
+        # Check if we generated insights recently
         cached = AIInsight.objects.filter(
             user=request.user,
             insight_type='coach_summary',
-            input_hash=input_hash,
             created_at__gte=timezone.now() - timedelta(hours=1)
         ).first()
         
@@ -109,26 +105,19 @@ class CoachSummaryView(APIView):
                 'suggestions': cached.suggestions
             })
         
-        # Generate new
+        # Generate new insights
         ai = OpenAIService()
         result = ai.generate_coach_summary(metrics_data)
         
-        # Save for next time
+        # Save it
         AIInsight.objects.create(
             user=request.user,
             insight_type='coach_summary',
-            input_hash=input_hash,
             explanation=result['explanation'],
             suggestions=result['suggestions']
         )
         
         return Response(result)
-    
-    def _hash_data(self, data):
-        """Quick hash for cache lookup"""
-        return hashlib.sha256(
-            json.dumps(data, sort_keys=True).encode()
-        ).hexdigest()
 
 
 class TrendInsightView(APIView):

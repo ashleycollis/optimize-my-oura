@@ -51,7 +51,6 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 ("insight_type", models.CharField(max_length=50)),
-                ("input_hash", models.CharField(max_length=64)),
                 ("explanation", models.TextField(blank=True)),
                 ("suggestions", models.JSONField(blank=True, default=list)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
@@ -66,12 +65,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["-created_at"],
-                "indexes": [
-                    models.Index(
-                        fields=["user", "insight_type", "input_hash"],
-                        name="api_aiinsig_user_id_923ebd_idx",
-                    )
-                ],
             },
         ),
         migrations.CreateModel(
@@ -109,11 +102,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["-date"],
-                "indexes": [
-                    models.Index(
-                        fields=["user", "date"], name="api_ouramet_user_id_cc4b41_idx"
-                    )
-                ],
                 "unique_together": {("user", "date")},
             },
         ),
