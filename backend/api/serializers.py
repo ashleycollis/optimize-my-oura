@@ -8,7 +8,8 @@ class OuraMetricSerializer(serializers.ModelSerializer):
         model = OuraMetric
         fields = [
             'id', 'date', 'readiness_score', 'sleep_score', 'activity_score',
-            'sleep_duration', 'deep_sleep', 'rem_sleep', 'hrv', 'resting_hr'
+            'sleep_duration', 'deep_sleep', 'rem_sleep', 'bedtime_start',
+            'hrv', 'resting_hr', 'steps', 'active_calories'
         ]
 
 

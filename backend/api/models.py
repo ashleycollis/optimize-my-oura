@@ -16,10 +16,15 @@ class OuraMetric(models.Model):
     sleep_duration = models.FloatField(null=True, blank=True)
     deep_sleep = models.FloatField(null=True, blank=True)
     rem_sleep = models.FloatField(null=True, blank=True)
+    bedtime_start = models.DateTimeField(null=True, blank=True)  # When you went to bed
     
     # Heart metrics
     hrv = models.IntegerField(null=True, blank=True)
     resting_hr = models.IntegerField(null=True, blank=True)
+    
+    # Activity metrics
+    steps = models.IntegerField(null=True, blank=True)
+    active_calories = models.IntegerField(null=True, blank=True)
     
     # raw data returned from Oura API 
     raw_data = models.JSONField(default=dict, blank=True)

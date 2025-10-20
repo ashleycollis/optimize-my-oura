@@ -23,6 +23,7 @@ function App() {
     chat: false,
   });
   const [lastSynced, setLastSynced] = useState('just now');
+  const [selectedMetric, setSelectedMetric] = useState('readiness'); // 'readiness', 'sleep', or 'activity'
 
   // Load data on mount
   useEffect(() => {
@@ -52,10 +53,10 @@ function App() {
     }
   };
 
-  const fetchCoachSummary = async () => {
+  const fetchCoachSummary = async (force = false) => {
     setLoading(prev => ({ ...prev, coach: true }));
     try {
-      const data = await apiService.getCoachSummary();
+      const data = await apiService.getCoachSummary(force);
       setCoachSummary(data);
     } catch (error) {
       console.error('Error fetching coach summary:', error);
@@ -92,7 +93,7 @@ function App() {
   };
 
   const handleRegenerateCoach = async () => {
-    await fetchCoachSummary();
+    await fetchCoachSummary(true); // force=true to bypass cache
   };
 
   const handleSendChat = async (message) => {
@@ -109,12 +110,17 @@ function App() {
     }
   };
 
-  // Calculate current scores from latest metrics
-  const latestMetric = metrics[0] || {};
+  // Calculate 30-day average scores from all metrics
+  const calculate30DayAverage = (scoreKey) => {
+    if (!metrics.length) return 0;
+    const total = metrics.reduce((sum, m) => sum + (m[scoreKey] || 0), 0);
+    return Math.round(total / metrics.length);
+  };
+  
   const scores = {
-    readiness: latestMetric.readiness_score || 78,
-    sleep: latestMetric.sleep_score || 85,
-    activity: latestMetric.activity_score || 72,
+    readiness: calculate30DayAverage('readiness_score') || 78,
+    sleep: calculate30DayAverage('sleep_score') || 85,
+    activity: calculate30DayAverage('activity_score') || 72,
   };
 
   // Calculate patterns
@@ -141,18 +147,24 @@ function App() {
               value={scores.readiness}
               meta="Your 30-day average"
               type="readiness"
+              isSelected={selectedMetric === 'readiness'}
+              onClick={() => setSelectedMetric('readiness')}
             />
             <ScoreCard
               label="Sleep Score"
               value={scores.sleep}
-              meta="Your best this week"
+              meta="Your 30-day average"
               type="sleep"
+              isSelected={selectedMetric === 'sleep'}
+              onClick={() => setSelectedMetric('sleep')}
             />
             <ScoreCard
               label="Activity"
               value={scores.activity}
-              meta="Below your average"
+              meta="Your 30-day average"
               type="activity"
+              isSelected={selectedMetric === 'activity'}
+              onClick={() => setSelectedMetric('activity')}
             />
           </div>
 
@@ -160,6 +172,7 @@ function App() {
             metrics={metrics.slice(0, 7)}
             insight={trendInsight}
             loading={loading.trend}
+            metricType={selectedMetric}
           />
 
           <h2 className="text-xl font-bold text-gray-900 mb-5 mt-8">Your Patterns</h2>
@@ -175,9 +188,9 @@ function App() {
               value={patterns.bestBedtime}
             />
             <PatternCard
-              icon="❤️"
-              label="Avg HRV"
-              value={patterns.avgHRV}
+              icon="👟"
+              label="Daily Steps"
+              value={patterns.avgSteps}
             />
           </div>
 
@@ -198,17 +211,35 @@ function calculatePatterns(metrics) {
     return {
       optimalSleep: '7.5h',
       bestBedtime: '10 PM',
-      avgHRV: '52ms',
+      avgSteps: '0',
     };
   }
 
   const avgSleep = metrics.reduce((sum, m) => sum + (m.sleep_duration || 0), 0) / metrics.length;
-  const avgHRV = metrics.reduce((sum, m) => sum + (m.hrv || 0), 0) / metrics.length;
+  const avgSteps = metrics.reduce((sum, m) => sum + (m.steps || 0), 0) / metrics.length;
+  
+  // Calculate best bedtime from bedtime_start timestamps
+  const bedtimes = metrics
+    .filter(m => m.bedtime_start)
+    .map(m => {
+      const date = new Date(m.bedtime_start);
+      return date.getHours() + date.getMinutes() / 60;
+    });
+  
+  let bestBedtime = '10 PM';
+  if (bedtimes.length > 0) {
+    const avgBedtimeHour = bedtimes.reduce((sum, h) => sum + h, 0) / bedtimes.length;
+    const hour = Math.floor(avgBedtimeHour);
+    const minute = Math.round((avgBedtimeHour - hour) * 60);
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+    bestBedtime = `${displayHour}:${minute.toString().padStart(2, '0')} ${period}`;
+  }
 
   return {
     optimalSleep: `${avgSleep.toFixed(1)}h`,
-    bestBedtime: '10 PM',
-    avgHRV: `${Math.round(avgHRV)}ms`,
+    bestBedtime: bestBedtime,
+    avgSteps: Math.round(avgSteps).toLocaleString(),
   };
 }
 

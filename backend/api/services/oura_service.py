@@ -21,11 +21,12 @@ class OuraService:
         
         try:
             sleep_data = self._fetch_endpoint('sleep', start_date, end_date)
+            daily_sleep_data = self._fetch_endpoint('daily_sleep', start_date, end_date)  # For sleep scores
             readiness_data = self._fetch_endpoint('daily_readiness', start_date, end_date)
             activity_data = self._fetch_endpoint('daily_activity', start_date, end_date)
             
             # Merge everything by date
-            result = self._merge_data(sleep_data, readiness_data, activity_data)
+            result = self._merge_data(sleep_data, daily_sleep_data, readiness_data, activity_data)
             # print(f"Got {len(result)} days of data")
             return result
             
@@ -46,7 +47,7 @@ class OuraService:
         response.raise_for_status()
         return response.json()
     
-    def _merge_data(self, sleep_data, readiness_data, activity_data):
+    def _merge_data(self, sleep_data, daily_sleep_data, readiness_data, activity_data):
         """Merge different data sources by date"""
         data = {}
         
@@ -56,11 +57,18 @@ class OuraService:
             # Convert seconds to hours (Oura returns seconds)
             data[date] = {
                 'date': date,
-                'sleep_score': item.get('score'),
+                'sleep_score': None,  # Will be filled from daily_sleep
                 'sleep_duration': item.get('total_sleep_duration', 0) / 3600,
                 'deep_sleep': item.get('deep_sleep_duration', 0) / 3600,
                 'rem_sleep': item.get('rem_sleep_duration', 0) / 3600,
+                'bedtime_start': item.get('bedtime_start'),  # ISO timestamp
             }
+        
+        # Get actual sleep scores from daily_sleep endpoint
+        for item in daily_sleep_data.get('data', []):
+            dt = item['day']
+            if dt in data:
+                data[dt]['sleep_score'] = item.get('score')
         
         # Layer in readiness data
         for item in readiness_data.get('data', []):
@@ -73,11 +81,13 @@ class OuraService:
             data[dt]['hrv'] = contribs.get('hrv_balance')
             data[dt]['resting_hr'] = contribs.get('resting_heart_rate')
         
-        # Add activity scores
+        # Add activity scores and metrics
         for item in activity_data.get('data', []):
             dt = item['day']
             if dt in data:
                 data[dt]['activity_score'] = item.get('score')
+                data[dt]['steps'] = item.get('steps')
+                data[dt]['active_calories'] = item.get('active_calories')
         
         # Sort by date
         return sorted(data.values(), key=lambda x: x['date'])

@@ -5,7 +5,7 @@ const AICoachCard = ({ explanation, suggestions, onRegenerate, loading }) => {
     <div className="bg-gradient-to-br from-[#667eea] to-[#764ba2] rounded-2xl p-6 text-white shadow-lg mb-6">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-xl">✨</span>
-        <span className="text-lg font-bold">AI Coach mmary</span>
+        <span className="text-lg font-bold">AI Coach Summary</span>
       </div>
       
       {loading ? (

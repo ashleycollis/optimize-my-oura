@@ -1,16 +1,35 @@
 import React from 'react';
 
-const TrendChart = ({ metrics, insight, loading }) => {
+const TrendChart = ({ metrics, insight, loading, metricType = 'readiness' }) => {
   if (!metrics || metrics.length === 0) {
     return null;
   }
 
-  const maxValue = Math.max(...metrics.map(m => m.readiness_score || 0), 100);
+  const metricConfig = {
+    readiness: {
+      key: 'readiness_score',
+      label: 'Readiness',
+      color: 'from-blue-400 to-blue-600',
+    },
+    sleep: {
+      key: 'sleep_score',
+      label: 'Sleep Score',
+      color: 'from-purple-400 to-purple-600',
+    },
+    activity: {
+      key: 'activity_score',
+      label: 'Activity',
+      color: 'from-green-400 to-green-600',
+    },
+  };
+
+  const config = metricConfig[metricType] || metricConfig.readiness;
+  const maxValue = Math.max(...metrics.map(m => m[config.key] || 0), 100);
   
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm mb-8">
       <div className="mb-5">
-        <h3 className="text-lg font-bold text-gray-900 mb-2">7-Day Trend</h3>
+        <h3 className="text-lg font-bold text-gray-900 mb-2">7-Day Trend - {config.label}</h3>
         {loading ? (
           <div className="text-sm text-gray-600">Loading trend analysis...</div>
         ) : insight ? (
@@ -24,16 +43,30 @@ const TrendChart = ({ metrics, insight, loading }) => {
         )}
       </div>
       
-      <div className="h-48 bg-gradient-to-b from-purple-50 to-transparent rounded-xl p-4 flex items-end gap-2">
+      <div className="h-56 bg-gradient-to-b from-purple-50 to-transparent rounded-xl p-4 flex items-end gap-2">
         {metrics.map((metric, index) => {
-          const height = metric.readiness_score ? (metric.readiness_score / maxValue) * 100 : 20;
+          const scoreValue = metric[config.key];
+          const height = scoreValue ? (scoreValue / maxValue) * 100 : 20;
+          const date = new Date(metric.date);
+          const dayLabel = date.toLocaleDateString('en-US', { weekday: 'short' });
+          const dateLabel = date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' });
+          
           return (
-            <div
-              key={index}
-              className="flex-1 bg-gradient-to-t from-[#667eea] to-[#764ba2] rounded-t-lg opacity-80 hover:opacity-100 hover:scale-105 transition-all cursor-pointer"
-              style={{ height: `${height}%`, minHeight: '20%' }}
-              title={`${metric.date}: ${metric.readiness_score || 'N/A'}`}
-            ></div>
+            <div key={index} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+              <div
+                className={`w-full bg-gradient-to-t ${config.color} rounded-t-lg opacity-80 hover:opacity-100 hover:scale-105 transition-all cursor-pointer relative flex items-start justify-center pt-2`}
+                style={{ height: `${height}%`, minHeight: '20%' }}
+                title={`${metric.date}: ${scoreValue || 'N/A'}`}
+              >
+                <span className="text-xs font-bold text-white drop-shadow-lg">
+                  {scoreValue || '-'}
+                </span>
+              </div>
+              <div className="mt-2 text-center">
+                <div className="text-xs font-semibold text-gray-700">{dayLabel}</div>
+                <div className="text-xs text-gray-500">{dateLabel}</div>
+              </div>
+            </div>
           );
         })}
       </div>

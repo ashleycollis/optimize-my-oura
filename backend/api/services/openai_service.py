@@ -61,10 +61,9 @@ Keep explanation to 1-2 sentences. Give 2 concrete suggestions (not medical advi
             return self._fallback_coach_summary()
     
     def generate_trend_insight(self, metrics):
-        """Generate trend analysis"""
         prompt = self._build_trend_prompt(metrics)
         
-        # FIXME: This is similar to coach_summary, maybe consolidate?
+      #This is similar to coach_summary
         try:
             resp = self.client.chat.completions.create(
                 model=self.model,

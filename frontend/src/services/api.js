@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// Use relative URL to leverage Vite proxy
+const API_BASE_URL = '/api';
 
 // Create axios instance
 const api = axios.create({
@@ -30,8 +31,8 @@ export const apiService = {
   },
 
   // Get coach summary
-  getCoachSummary: async () => {
-    const response = await api.post('/coach-summary/');
+  getCoachSummary: async (force = false) => {
+    const response = await api.post('/coach-summary/', { force });
     return response.data;
   },
 
