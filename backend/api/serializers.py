@@ -3,7 +3,6 @@ from .models import OuraMetric
 
 
 class OuraMetricSerializer(serializers.ModelSerializer):
-    """Basic serializer for daily metrics"""
     class Meta:
         model = OuraMetric
         fields = [

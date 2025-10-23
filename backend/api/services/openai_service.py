@@ -6,7 +6,6 @@ import httpx
 
 
 class OpenAIService:
-    """Handles OpenAI API calls for insights"""
     
     def __init__(self):
         # Workaround for proxy issues - see https://github.com/openai/openai-python/issues/...
@@ -23,7 +22,6 @@ class OpenAIService:
         self.timeout = 15
     
     def generate_coach_summary(self, metrics):
-        """Generate AI coach summary from 7-day metrics"""
         prompt = self._build_coach_prompt(metrics)
         
         try:
@@ -95,7 +93,6 @@ Focus on what changed and any patterns you see."""
             return self._fallback_trend_insight()
     
     def generate_chat_response(self, message, metrics):
-        """Generate response to user question"""
         ctx = self._build_context(metrics)
         
         try:

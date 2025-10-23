@@ -5,7 +5,6 @@ from django.conf import settings
 
 
 class OuraService:
-    """Handles Oura API calls"""
     
     def __init__(self, access_token):
         self.token = access_token
@@ -13,19 +12,19 @@ class OuraService:
         self.headers = {'Authorization': f'Bearer {access_token}'}
     
     def fetch_metrics(self, days=7):
-        """Fetch last N days of metrics"""
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=days)
         
         # print(f"Fetching {days} days from {start_date} to {end_date}")
         
         try:
+            # sleep score is separate from duration so need both endpoints
             sleep_data = self._fetch_endpoint('sleep', start_date, end_date)
-            daily_sleep_data = self._fetch_endpoint('daily_sleep', start_date, end_date)  # For sleep scores
+            daily_sleep_data = self._fetch_endpoint('daily_sleep', start_date, end_date)
             readiness_data = self._fetch_endpoint('daily_readiness', start_date, end_date)
             activity_data = self._fetch_endpoint('daily_activity', start_date, end_date)
             
-            # Merge everything by date
+            # merge everything by date
             result = self._merge_data(sleep_data, daily_sleep_data, readiness_data, activity_data)
             # print(f"Got {len(result)} days of data")
             return result
@@ -34,8 +33,18 @@ class OuraService:
             print(f"Error fetching Oura data: {e}")
             raise
     
+    def fetch_workouts(self, days=30):
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+        
+        try:
+            workout_data = self._fetch_endpoint('workout', start_date, end_date)
+            return workout_data.get('data', [])
+        except Exception as e:
+            print(f"Error fetching workouts: {e}")
+            return []
+    
     def _fetch_endpoint(self, endpoint, start_date, end_date):
-        """Fetch from specific endpoint"""
         url = f"{self.base_url}/{endpoint}"
         params = {
             'start_date': start_date.isoformat(),
@@ -48,13 +57,12 @@ class OuraService:
         return response.json()
     
     def _merge_data(self, sleep_data, daily_sleep_data, readiness_data, activity_data):
-        """Merge different data sources by date"""
         data = {}
         
-        # Start with sleep since it's usually most complete
+        # sleep data is usually most complete so start there
         for item in sleep_data.get('data', []):
             date = item['day']
-            # Convert seconds to hours (Oura returns seconds)
+            # oura returns seconds so convert to hours
             data[date] = {
                 'date': date,
                 'sleep_score': None,  # Will be filled from daily_sleep
@@ -64,24 +72,24 @@ class OuraService:
                 'bedtime_start': item.get('bedtime_start'),  # ISO timestamp
             }
         
-        # Get actual sleep scores from daily_sleep endpoint
+        # get the actual scores from daily_sleep endpoint
         for item in daily_sleep_data.get('data', []):
             dt = item['day']
             if dt in data:
                 data[dt]['sleep_score'] = item.get('score')
         
-        # Layer in readiness data
+        # add readiness data
         for item in readiness_data.get('data', []):
             dt = item['day']
             if dt not in data:
-                continue  # Skip if no sleep data for this day
+                continue  # skip if no sleep data
             
             contribs = item.get('contributors', {})
             data[dt]['readiness_score'] = item.get('score')
             data[dt]['hrv'] = contribs.get('hrv_balance')
             data[dt]['resting_hr'] = contribs.get('resting_heart_rate')
         
-        # Add activity scores and metrics
+        # add activity stuff
         for item in activity_data.get('data', []):
             dt = item['day']
             if dt in data:
@@ -89,6 +97,6 @@ class OuraService:
                 data[dt]['steps'] = item.get('steps')
                 data[dt]['active_calories'] = item.get('active_calories')
         
-        # Sort by date
+        # sort by date before returning
         return sorted(data.values(), key=lambda x: x['date'])
 

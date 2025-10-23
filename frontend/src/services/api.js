@@ -25,8 +25,16 @@ api.interceptors.request.use((config) => {
 // API functions
 export const apiService = {
   // Get metrics
-  getMetrics: async () => {
-    const response = await api.get('/metrics/');
+  getMetrics: async (force = false) => {
+    const url = force ? '/metrics/?force=true' : '/metrics/';
+    const response = await api.get(url);
+    return response.data;
+  },
+
+  // Get workouts
+  getWorkouts: async (force = false) => {
+    const url = force ? '/workouts/?force=true' : '/workouts/';
+    const response = await api.get(url);
     return response.data;
   },
 

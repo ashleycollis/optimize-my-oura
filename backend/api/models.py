@@ -49,6 +49,36 @@ class UserProfile(models.Model):
         return f"{self.user.username}'s profile"
 
 
+class Workout(models.Model):
+    """Stores workout sessions from Oura Ring"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='workouts')
+    oura_id = models.CharField(max_length=255, unique=True)  # Oura's workout ID
+    day = models.DateField()  # Date of workout
+    activity = models.CharField(max_length=100)  # e.g., "cycling", "running"
+    calories = models.IntegerField(null=True, blank=True)
+    intensity = models.CharField(max_length=50, null=True, blank=True)  # "easy", "moderate", "hard"
+    start_datetime = models.DateTimeField(null=True, blank=True)
+    end_datetime = models.DateTimeField(null=True, blank=True)
+    source = models.CharField(max_length=50, null=True, blank=True)  # "manual", "autodetected", etc
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-day', '-start_datetime']
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.activity} on {self.day}"
+    
+    @property
+    def duration_minutes(self):
+        """Calculate workout duration in minutes"""
+        if self.start_datetime and self.end_datetime:
+            delta = self.end_datetime - self.start_datetime
+            return round(delta.total_seconds() / 60)
+        return None
+
+
 class AIInsight(models.Model):
     """Stores AI-generated insights (summaries, trends, chat replies) """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='insights')

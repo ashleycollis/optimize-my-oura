@@ -4,12 +4,14 @@ import AICoachCard from './components/AICoachCard';
 import ScoreCard from './components/ScoreCard';
 import TrendChart from './components/TrendChart';
 import PatternCard from './components/PatternCard';
+import WorkoutCard from './components/WorkoutCard';
 import ChatBox from './components/ChatBox';
 import { apiService } from './services/api';
 
 function App() {
   // State
   const [metrics, setMetrics] = useState([]);
+  const [workouts, setWorkouts] = useState([]);
   const [coachSummary, setCoachSummary] = useState({
     explanation: '',
     suggestions: []
@@ -18,12 +20,16 @@ function App() {
   const [chatResponse, setChatResponse] = useState('');
   const [loading, setLoading] = useState({
     metrics: false,
+    workouts: false,
     coach: false,
     trend: false,
     chat: false,
   });
+  const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState('just now');
   const [selectedMetric, setSelectedMetric] = useState('readiness'); // 'readiness', 'sleep', or 'activity'
+  const [showAllWorkouts, setShowAllWorkouts] = useState(false);
+  const [timeRange, setTimeRange] = useState(7); // 7 or 30 days
 
   // Load data on mount
   useEffect(() => {
@@ -33,6 +39,7 @@ function App() {
   const loadAllData = async () => {
     await Promise.all([
       fetchMetrics(),
+      fetchWorkouts(),
       fetchCoachSummary(),
       fetchTrendInsight(),
     ]);
@@ -43,14 +50,56 @@ function App() {
     try {
       const data = await apiService.getMetrics();
       setMetrics(data.metrics || []);
-      setLastSynced('just now');
+      updateLastSynced();
     } catch (error) {
       console.error('Error fetching metrics:', error);
-      // Use mock data for demo
       setMetrics(generateMockMetrics());
     } finally {
       setLoading(prev => ({ ...prev, metrics: false }));
     }
+  };
+
+  const fetchWorkouts = async () => {
+    setLoading(prev => ({ ...prev, workouts: true }));
+    try {
+      const data = await apiService.getWorkouts();
+      setWorkouts(data.workouts || []);
+    } catch (error) {
+      console.error('Error fetching workouts:', error);
+      setWorkouts([]);
+    } finally {
+      setLoading(prev => ({ ...prev, workouts: false }));
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      // Force fetch fresh data from Oura
+      setLoading(prev => ({ ...prev, metrics: true }));
+      const data = await apiService.getMetrics(true); // force=true
+      setMetrics(data.metrics || []);
+      updateLastSynced();
+      setLoading(prev => ({ ...prev, metrics: false }));
+      
+      // Also regenerate AI insights with fresh data
+      await fetchCoachSummary(true);
+    } catch (error) {
+      console.error('Error syncing:', error);
+      setLoading(prev => ({ ...prev, metrics: false }));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const updateLastSynced = () => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    setLastSynced(timeStr);
   };
 
   const fetchCoachSummary = async (force = false) => {
@@ -110,27 +159,31 @@ function App() {
     }
   };
 
-  // Calculate 30-day average scores from all metrics
-  const calculate30DayAverage = (scoreKey) => {
+  // backend sends newest first so need slice(0, timeRange) to get recent days
+  const calculateAverage = (scoreKey) => {
     if (!metrics.length) return 0;
-    const total = metrics.reduce((sum, m) => sum + (m[scoreKey] || 0), 0);
-    return Math.round(total / metrics.length);
+    const rangeMetrics = metrics.slice(0, timeRange);
+    const total = rangeMetrics.reduce((sum, m) => sum + (m[scoreKey] || 0), 0);
+    return Math.round(total / rangeMetrics.length);
   };
   
   const scores = {
-    readiness: calculate30DayAverage('readiness_score') || 78,
-    sleep: calculate30DayAverage('sleep_score') || 85,
-    activity: calculate30DayAverage('activity_score') || 72,
+    readiness: calculateAverage('readiness_score') || 78,
+    sleep: calculateAverage('sleep_score') || 85,
+    activity: calculateAverage('activity_score') || 72,
   };
 
-  // Calculate patterns
-  const patterns = calculatePatterns(metrics);
+  const patterns = calculatePatterns(metrics.slice(0, timeRange));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#667eea] to-[#764ba2] py-12 px-8 pb-24">
       <div className="max-w-6xl mx-auto rounded-3xl shadow-2xl">
         <div className="bg-white rounded-t-3xl">
-          <Header lastSynced={lastSynced} />
+          <Header 
+            lastSynced={lastSynced}
+            onSync={handleSyncNow}
+            syncing={syncing}
+          />
         </div>
         
         <div className="px-8 pt-8 pb-24 bg-gray-50 rounded-b-3xl">
@@ -141,11 +194,36 @@ function App() {
             loading={loading.coach}
           />
 
+          <div className="flex justify-center mb-6">
+            <div className="inline-flex rounded-lg border-2 border-gray-200 bg-white p-1">
+              <button
+                onClick={() => setTimeRange(7)}
+                className={`px-6 py-2 text-sm font-semibold rounded-md transition-all ${
+                  timeRange === 7
+                    ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                7 Days
+              </button>
+              <button
+                onClick={() => setTimeRange(30)}
+                className={`px-6 py-2 text-sm font-semibold rounded-md transition-all ${
+                  timeRange === 30
+                    ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-md'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                30 Days
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <ScoreCard
               label="Readiness"
               value={scores.readiness}
-              meta="Your 30-day average"
+              meta={`Your ${timeRange}-day average`}
               type="readiness"
               isSelected={selectedMetric === 'readiness'}
               onClick={() => setSelectedMetric('readiness')}
@@ -153,7 +231,7 @@ function App() {
             <ScoreCard
               label="Sleep Score"
               value={scores.sleep}
-              meta="Your 30-day average"
+              meta={`Your ${timeRange}-day average`}
               type="sleep"
               isSelected={selectedMetric === 'sleep'}
               onClick={() => setSelectedMetric('sleep')}
@@ -161,7 +239,7 @@ function App() {
             <ScoreCard
               label="Activity"
               value={scores.activity}
-              meta="Your 30-day average"
+              meta={`Your ${timeRange}-day average`}
               type="activity"
               isSelected={selectedMetric === 'activity'}
               onClick={() => setSelectedMetric('activity')}
@@ -169,30 +247,52 @@ function App() {
           </div>
 
           <TrendChart
-            metrics={metrics.slice(0, 7)}
+            metrics={metrics.slice(0, timeRange)}
             insight={trendInsight}
             loading={loading.trend}
             metricType={selectedMetric}
+            timeRange={timeRange}
           />
 
           <h2 className="text-xl font-bold text-gray-900 mb-5 mt-8">Your Patterns</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <PatternCard
               icon="🛏️"
-              label="Optimal Sleep"
+              label="Average Sleep"
               value={patterns.optimalSleep}
             />
             <PatternCard
               icon="🌙"
-              label="Best Bedtime"
+              label="Average Bedtime"
               value={patterns.bestBedtime}
             />
             <PatternCard
               icon="👟"
-              label="Daily Steps"
+              label="Avg Steps"
               value={patterns.avgSteps}
             />
           </div>
+
+          {workouts.length > 0 && (
+            <>
+              <div className="flex items-center justify-between mb-5 mt-8">
+                <h2 className="text-xl font-bold text-gray-900">Recent Workouts</h2>
+                {workouts.length > 6 && (
+                  <button
+                    onClick={() => setShowAllWorkouts(!showAllWorkouts)}
+                    className="px-4 py-2 text-sm font-medium text-[#667eea] hover:bg-purple-50 rounded-lg transition-colors"
+                  >
+                    {showAllWorkouts ? `Show Less` : `Show All (${workouts.length})`}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                {(showAllWorkouts ? workouts : workouts.slice(0, 6)).map((workout) => (
+                  <WorkoutCard key={workout.id} workout={workout} />
+                ))}
+              </div>
+            </>
+          )}
 
           <ChatBox
             onSendMessage={handleSendChat}

@@ -22,11 +22,7 @@ import logging  # might use this for better error tracking later
 
 
 class MetricsView(APIView):
-    """
-    Fetches Oura metrics with 1-hour cache to avoid hammering the API.
-    TODO: Move caching logic to service layer
-    TODO: Add authentication back after MVP
-    """
+    """Fetches Oura metrics with basic caching"""
     permission_classes = [AllowAny]  # Temp: No auth for MVP
     
     def get(self, request):
@@ -48,27 +44,31 @@ class MetricsView(APIView):
         if not profile.oura_access_token:
             return Response({'error': 'No Oura account connected'}, 400)
         
-        # Check cache first (1 hour TTL)
-        one_hour_ago = timezone.now() - timedelta(hours=1)
-        recent_metrics = OuraMetric.objects.filter(
-            user=user,
-            updated_at__gte=one_hour_ago
-        ).order_by('-date')[:7]
+        # Check if force refresh requested
+        force_refresh = request.query_params.get('force', 'false').lower() == 'true'
         
-        if recent_metrics.count() == 7:
-            serializer = OuraMetricSerializer(recent_metrics, many=True)
-            return Response({'metrics': serializer.data})
+        # check cache first (1 hour TTL) unless force refresh
+        if not force_refresh:
+            one_hour_ago = timezone.now() - timedelta(hours=1)
+            recent_metrics = OuraMetric.objects.filter(
+                user=user,
+                updated_at__gte=one_hour_ago
+            ).order_by('-date')[:30]  # get 30 for the toggle
+            
+            if recent_metrics.count() >= 7:  # cache hit
+                serializer = OuraMetricSerializer(recent_metrics, many=True)
+                return Response({'metrics': serializer.data})
         
-        # Cache miss - fetch from Oura
+        # cache miss or force refresh - fetch from oura
         try:
             oura = OuraService(profile.oura_access_token)
-            data = oura.fetch_metrics(days=7)
+            data = oura.fetch_metrics(days=30)  # fetch 30 days
             # print(f"Fetched {len(data)} days from Oura")  # debug
             
-            # Save to DB
+            # save to db
             saved_metrics = []
             for item in data:
-                # Could probably use bulk_create here but this works
+                # could use bulk_create but this works fine
                 metric, _ = OuraMetric.objects.update_or_create(
                     user=user,
                     date=item['date'],
@@ -98,7 +98,6 @@ class MetricsView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CoachSummaryView(APIView):
-    """Generate AI insights from recent metrics"""
     permission_classes = [AllowAny]  # Temp: No auth for MVP
     
     def post(self, request):
@@ -260,3 +259,75 @@ class ConnectOuraView(APIView):
         profile.save()
         
         return Response({'message': 'Connected successfully'})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class WorkoutsView(APIView):
+    """Fetch and return workout data"""
+    permission_classes = [AllowAny]
+    
+    def get(self, request):
+        from django.contrib.auth.models import User
+        from api.models import Workout
+        
+        try:
+            # Find user with token
+            profile = UserProfile.objects.filter(
+                oura_access_token__isnull=False
+            ).exclude(oura_access_token='').first()
+            
+            if not profile:
+                return Response({'error': 'No Oura account connected'}, 400)
+            
+            user = profile.user
+        except Exception as e:
+            return Response({'error': str(e)}, 500)
+        
+        # Check if we should fetch fresh data
+        force_refresh = request.query_params.get('force', 'false').lower() == 'true'
+        
+        # Get recent workouts from DB
+        recent_workouts = Workout.objects.filter(user=user).order_by('-day')[:30]
+        
+        # If no workouts or force refresh, fetch from Oura
+        if not recent_workouts.exists() or force_refresh:
+            try:
+                oura = OuraService(profile.oura_access_token)
+                workout_data = oura.fetch_workouts(days=30)
+                
+                # Save to DB
+                for item in workout_data:
+                    Workout.objects.update_or_create(
+                        oura_id=item['id'],
+                        defaults={
+                            'user': user,
+                            'day': item['day'],
+                            'activity': item.get('activity', 'Unknown'),
+                            'calories': item.get('calories'),
+                            'intensity': item.get('intensity'),
+                            'start_datetime': item.get('start_datetime'),
+                            'end_datetime': item.get('end_datetime'),
+                            'source': item.get('source'),
+                        }
+                    )
+                
+                recent_workouts = Workout.objects.filter(user=user).order_by('-day')[:30]
+            except Exception as e:
+                return Response({'error': f'Failed to fetch workouts: {str(e)}'}, 500)
+        
+        # Serialize and return
+        workouts_list = []
+        for workout in recent_workouts:
+            workouts_list.append({
+                'id': workout.id,
+                'day': workout.day,
+                'activity': workout.activity,
+                'calories': workout.calories,
+                'intensity': workout.intensity,
+                'duration_minutes': workout.duration_minutes,
+                'start_datetime': workout.start_datetime,
+                'end_datetime': workout.end_datetime,
+                'source': workout.source,
+            })
+        
+        return Response({'workouts': workouts_list})

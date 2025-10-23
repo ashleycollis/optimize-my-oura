@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     MetricsView,
+    WorkoutsView,
     CoachSummaryView,
     TrendInsightView,
     ChatView,
@@ -10,6 +11,7 @@ from .views import (
 urlpatterns = [
     # Oura data endpoints
     path('metrics/', MetricsView.as_view(), name='metrics'),
+    path('workouts/', WorkoutsView.as_view(), name='workouts'),
     path('connect-oura/', ConnectOuraView.as_view(), name='connect-oura'),
     
     # AI features
