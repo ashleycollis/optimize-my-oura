@@ -28,10 +28,7 @@ const Header = ({ lastSynced, onSync, syncing }) => {
                 Syncing...
               </>
             ) : (
-              <>
-                <span>🔄</span>
-                Sync Now
-              </>
+              'Sync Now'
             )}
           </button>
         </div>

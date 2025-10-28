@@ -12,10 +12,7 @@ function App() {
   // State
   const [metrics, setMetrics] = useState([]);
   const [workouts, setWorkouts] = useState([]);
-  const [coachSummary, setCoachSummary] = useState({
-    explanation: '',
-    suggestions: []
-  });
+  const [coachSummary, setCoachSummary] = useState(null);
   const [trendInsight, setTrendInsight] = useState(null);
   const [chatResponse, setChatResponse] = useState('');
   const [loading, setLoading] = useState({
@@ -188,8 +185,7 @@ function App() {
         
         <div className="px-8 pt-8 pb-24 bg-gray-50 rounded-b-3xl">
           <AICoachCard
-            explanation={coachSummary.explanation}
-            suggestions={coachSummary.suggestions}
+            coachData={coachSummary}
             onRegenerate={handleRegenerateCoach}
             loading={loading.coach}
           />
@@ -257,17 +253,14 @@ function App() {
           <h2 className="text-xl font-bold text-gray-900 mb-5 mt-8">Your Patterns</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
             <PatternCard
-              icon="🛏️"
               label="Average Sleep"
               value={patterns.optimalSleep}
             />
             <PatternCard
-              icon="🌙"
               label="Average Bedtime"
               value={patterns.bestBedtime}
             />
             <PatternCard
-              icon="👟"
               label="Avg Steps"
               value={patterns.avgSteps}
             />

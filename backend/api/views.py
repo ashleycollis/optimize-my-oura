@@ -22,8 +22,7 @@ import logging  # might use this for better error tracking later
 
 
 class MetricsView(APIView):
-    """Fetches Oura metrics with basic caching"""
-    permission_classes = [AllowAny]  # Temp: No auth for MVP
+    permission_classes = [AllowAny]
     
     def get(self, request):
         # For MVP: use user with Oura token
@@ -98,10 +97,9 @@ class MetricsView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CoachSummaryView(APIView):
-    permission_classes = [AllowAny]  # Temp: No auth for MVP
+    permission_classes = [AllowAny]
     
     def post(self, request):
-        # For MVP: use user with metrics
         try:
             profile = UserProfile.objects.filter(
                 oura_access_token__isnull=False
@@ -133,32 +131,29 @@ class CoachSummaryView(APIView):
             ).first()
             
             if cached:
-                # print(f"Cache hit for {user.username}")
-                return Response({
-                    'explanation': cached.explanation,
-                    'suggestions': cached.suggestions
-                })
+                # cached format could be old (explanation/suggestions) or new (full JSON in suggestions)
+                if cached.suggestions and isinstance(cached.suggestions, dict) and 'summary' in cached.suggestions:
+                    return Response(cached.suggestions)
         
         # Generate new insights
         ai = OpenAIService()
         result = ai.generate_coach_summary(metrics_data)
         
-        # Save it
+        # Save full result in suggestions field
         AIInsight.objects.create(
             user=user,
             insight_type='coach_summary',
-            explanation=result['explanation'],
-            suggestions=result['suggestions']
+            explanation='',  # empty for new format
+            suggestions=result
         )
         
         return Response(result)
 
 
 class TrendInsightView(APIView):
-    permission_classes = [AllowAny]  # Temp: No auth for MVP
+    permission_classes = [AllowAny]
     
     def get(self, request):
-        # For MVP: use user with metrics
         try:
             profile = UserProfile.objects.filter(
                 oura_access_token__isnull=False

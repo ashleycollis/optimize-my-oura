@@ -9,7 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 30000, // 30 seconds for AI API calls
   withCredentials: true, // Important for Django sessions
 });
 
