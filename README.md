@@ -1,12 +1,13 @@
 # optimize-my-oura
 
-Personal health dashboard pulling data from Oura Ring with AI-powered insights. Built to track sleep, readiness, and activity metrics more effectively than the native app.
+Personal health dashboard powered by Oura Ring data and AI insights.
 
+A custom dashboard that visualizes your sleep, readiness, and activity metrics more effectively than the native Oura app. It integrates directly with the Oura API and uses AI-generated insights to give personalized health guidance.
 
 ## Features
 
 - **Daily Metrics**: Sleep, readiness, and activity scores with 7/30-day trend views
-- **AI Coach**: GPT-4o-mini powered recommendations based on your data patterns
+- **AI Coach Summary**: GPT-4o-mini powered recommendations based on your data patterns
 - **Workout Tracking**: Activity sessions synced from Oura's workout API
 - **Pattern Analysis**: Average sleep, bedtime, and step counts over time
 - **Interactive Chat**: Ask questions about your health data in natural language
@@ -42,6 +43,10 @@ cp env.example .env
 python manage.py migrate
 python manage.py createsuperuser  # optional
 python manage.py runserver
+
+
+source venv/bin/activate
+python manage.py runserver 0.0.0.0:8000
 ```
 
 ```bash
@@ -52,12 +57,19 @@ npm run dev
 ```
 
 Visit `http://localhost:5173`
+Table data can be be viewed at admin panel: `http://localhost:8000/admin`
+
+
+## Configure OpenAI 
+Get one at: https://platform.openai.com/api-keys"
+Set OPENAI_API_KEY in .env file 
+Credits required for GPT-4o-mini feature https://platform.openai.com/settings/organization/billing
 
 ### Oura Token Setup
 
 1. Generate personal access token at https://cloud.ouraring.com/personal-access-tokens
 2. Django admin: `http://localhost:8000/admin`
-3. Create UserProfile for your user and paste token
+3. Create UserProfile for your user and paste token and set as OURA_TOKEN in .env profile
 4. Refresh frontend to load data
 
 ## Architecture
