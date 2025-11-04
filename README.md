@@ -93,14 +93,19 @@ Credits required for GPT-4o-mini feature https://platform.openai.com/settings/or
 
 ## Testing
 
+Basic unit tests for models and API endpoints
+
 ```bash
 cd backend
 source venv/bin/activate
 python manage.py test
 ```
 
-Basic unit tests for models and API endpoints
 
+<img width="300" height="300" alt="Image" src="https://github.com/user-attachments/assets/6784585a-e131-45b4-bed6-055ab5d6ffbe" />
 
+<img width="300" height="300" alt="Image" src="https://github.com/user-attachments/assets/79f295da-1159-421c-be7f-3066957c693c" />
+
+<img width="300" height="300" alt="Image" src="https://github.com/user-attachments/assets/ed35afe9-c419-4440-9b16-6ab2697f296b" />
 
 # owner: Ashley Collis-Burgess
